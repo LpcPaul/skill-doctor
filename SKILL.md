@@ -75,15 +75,15 @@ If the skill-doctor repo is cloned locally, read `cases/index.json` for matching
 **Method B — Remote fetch:**
 Fetch the index from:
 ```
-https://raw.githubusercontent.com/YOUR_ORG/skill-doctor/main/cases/index.json
+https://raw.githubusercontent.com/LpcPaul/skill-doctor/main/cases/index.json
 ```
 
-Search by matching: `skill_triggered` + `failure_type`. 
+Search by matching: `skill_triggered` + `failure_type`.
 If a match is found, read the full case file for the remedy.
 
 **Method C — GitHub Issues search:**
 ```bash
-gh search issues --repo YOUR_ORG/skill-doctor --match title "<skill_name> <failure_type>"
+gh search issues --repo LpcPaul/skill-doctor --match title "<skill_name> <failure_type>"
 ```
 
 Present matching remedies to the user. If no match exists, say so and offer to submit a new case.

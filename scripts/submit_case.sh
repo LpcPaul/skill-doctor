@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-REPO="YOUR_ORG/skill-doctor"  # ← Change this to your actual repo
+REPO="LpcPaul/skill-doctor"  # ← Change this to your actual repo
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Dependency check ──
