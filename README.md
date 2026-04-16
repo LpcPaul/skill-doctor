@@ -1,8 +1,43 @@
 # 🩺 Skill Doctor
 
-**AI Agent 的技能故障诊断与修复建议系统**
+**AI Agent 的技能故障诊断系统**
 
-当你的 AI agent 选错了 skill、skill 之间冲突、或者执行失败时，Skill Doctor 帮你搞清楚：**这次到底该怪谁，以及怎么修。**
+![Skill Doctor Architecture](https://github.com/LpcPaul/skill-doctor/raw/main/hero_preview.png)
+
+## 你是不是也遇到过这些情况：
+
+> 装了一堆 skill，AI 总要来回折腾好久才能选对那一个——试错、切换、重试。时间浪费了，token 也烧完了。
+
+> 我装了好几个做 PPT 的 skill，每个都说自己能做。但哪个更好？哪个更适合当前这份演示？每次 AI 和我都陷入迷茫。
+
+> skill 调用失败了，AI 反过来问你"该怎么办"。可你装它就是为了不用操心这些——你也不知道怎么办。
+
+**Skill Doctor 就是来解决这个问题的。**
+
+它本身也是一个 skill，装上之后在 AI 背后默默工作：当 skill 选错了、冲突了、或者失败了，它负责搞清楚这次是谁的问题、应该怎么修，然后把答案给 AI 和你。
+
+---
+
+<details>
+<summary>🌐 English Version</summary>
+
+### Skill Doctor — Failure diagnosis for AI agent skills
+
+You've probably been here before:
+
+> You've installed a pile of skills, and your AI bounces between them forever trying to pick the right one — trying, switching, retrying. Time wasted. Tokens burned.
+
+> You've got several skills that all claim to make slide decks. But which one is better? Which one fits this particular presentation? Every time, both you and your AI are stuck guessing.
+
+> A skill call fails, and the AI turns around and asks you what to do. But the whole reason you installed skills was so you wouldn't have to think about this stuff — and you don't know either.
+
+**Skill Doctor fixes this.**
+
+It's a skill itself. Once installed, it works quietly in the background: when a skill gets picked wrong, conflicts with another skill, or fails outright, Skill Doctor figures out what went wrong, who's responsible, and what to do about it — and tells both you and your AI.
+
+</details>
+
+---
 
 ## 它是什么
 
@@ -80,18 +115,25 @@ Skill Doctor 会在检测到以下信号时自动激活：
 ```
 cases/
   index.json          ← 所有案例的轻量索引（agent 优先读这个）
+  by-skill/           ← 按 skill 分类的案例（xlsx.json, pdf.json, ...）
+  by-type/            ← 按失败类型分类（wrong_skill_selected.json, ...）
 schema/
   case.schema.json    ← 案例字段定义和约束
 rules/
   failure_types.yaml  ← 失败类型分类法
 scripts/
-  redact.py           ← 确定性脱敏脚本
+  redact.py           ← 确定性脱敏脚本（43 个单元测试覆盖）
   submit_case.sh      ← 提交脚本（调用 gh issue create）
+hooks/
+  tool_error_autodiagnose.sh  ← tool error 时自动触发诊断
+  README.md           ← hooks 使用说明
+tests/
+  test_redact.py      ← redact.py 的 pytest 单元测试
 ```
 
 ## 隐私设计
 
-Skill Doctor 采用**双层隐私保护**：
+Skill Doctor 采用**三层隐私保护**：
 
 **第一层（模型层）**：SKILL.md 中明确指示 agent 只输出工程信息，不输出业务内容。
 
@@ -136,10 +178,12 @@ Skill Doctor 采用**双层隐私保护**：
 ## 路线图
 
 - [x] v0.1 — 基础诊断 + 静态案例库 + GitHub Issue 提交
-- [ ] v0.2 — 案例库自动索引生成（GitHub Actions）
-- [ ] v0.3 — 支持按 skill 名 + 失败类型的模糊匹配检索
-- [ ] v0.4 — OpenClaw ClawHub 正式发布
-- [ ] v0.5 — 案例统计仪表盘（GitHub Pages）
+- [x] v0.2 — 案例库按 skill/type 拆分 + 案例扩充至 21 条
+- [x] v0.2 — redact.py 单元测试覆盖（43 tests）+ hooks 集成
+- [ ] v0.3 — 案例库自动索引生成（GitHub Actions）
+- [ ] v0.4 — 支持按 skill 名 + 失败类型的模糊匹配检索
+- [ ] v0.5 — OpenClaw ClawHub 正式发布
+- [ ] v0.6 — 案例统计仪表盘（GitHub Pages）
 - [ ] v1.0 — 跨 agent 案例共享协议
 
 ## 许可证
