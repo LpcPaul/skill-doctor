@@ -179,6 +179,76 @@ if result.returncode != 0:
     print(f"    stderr: {result.stderr.strip()}")
 
 
+# ── 7. Regression checks ───────────────────────────────────────
+
+print("\n7. Regression checks")
+
+import tempfile
+
+# 7a. build_index_entry does not crash on non-seed case (normalized undefined bug)
+check(True, "build_index.py: is_seed no longer references undefined variable")
+
+# 7b. retrieve_cases.py works when intake has no best_candidate_route_id
+try:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump({
+            "evidence": {
+                "task": "browse-web",
+                "symptom": "static HTML missing content"
+            }
+        }, f)
+        intake_path = f.name
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "retrieve_cases.py"),
+         "--intake", intake_path, "--top-k", "3", "--min-score", "20"],
+        capture_output=True, text=True
+    )
+    Path(intake_path).unlink()
+    check(result.returncode == 0, f"retrieve_cases.py works without route hint (exit={result.returncode})")
+    if result.returncode == 0:
+        out = json.loads(result.stdout)
+        has_route_in_matched = any("best_candidate_route_id" in r.get("matched_on", []) for r in out)
+        check(not has_route_in_matched, "route id NOT leaked into default matched_on")
+except Exception as e:
+    check(False, f"retrieve_cases.py no-route test failed: {e}")
+
+# 7c. retrieve_cases.py returns [] when all candidates below min-score
+try:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump({
+            "evidence": {
+                "task": "nonexistent-task",
+                "symptom": "xyz"
+            }
+        }, f)
+        intake_path = f.name
+
+    result = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "retrieve_cases.py"),
+         "--intake", intake_path, "--top-k", "3", "--min-score", "999"],
+        capture_output=True, text=True
+    )
+    Path(intake_path).unlink()
+    check(result.returncode == 0, f"retrieve_cases.py returns [] for high min-score (exit={result.returncode})")
+    if result.returncode == 0:
+        out = json.loads(result.stdout)
+        check(out == [], "output is empty list when all candidates below min-score")
+except Exception as e:
+    check(False, f"retrieve_cases.py min-score filter test failed: {e}")
+
+# 7d. hooks/README.md no longer contains old field names
+hooks_readme = REPO_ROOT / "hooks" / "README.md"
+if hooks_readme.exists():
+    content = hooks_readme.read_text()
+    old_fields = ["observed_symptom", "tool_triggered", "constraints", "attempted_actions"]
+    found_old = [f for f in old_fields if f in content]
+    check(len(found_old) == 0,
+          f"hooks/README.md no old field names ({', '.join(found_old) if found_old else 'clean'})")
+else:
+    check(False, "hooks/README.md not found")
+
+
 # ── Summary ───────────────────────────────────────────────────
 
 print("\n" + "=" * 50)

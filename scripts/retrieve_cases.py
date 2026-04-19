@@ -7,17 +7,28 @@ from the case library using deterministic matching. This script does NOT
 recommend a final route — it surfaces candidates for the agent to reason
 over.
 
-Retrieval priority (highest to lowest):
-1. task exact match
-2. journey_stage exact match
-3. problem_family exact match
-4. best_candidate_route_id same-bucket weighting
-5. symptom / tags / searchable_text as weak match
-6. environment as rerank signal (not primary classification)
+Default retrieval mode (no route leakage):
+  Only uses evidence-driven fields:
+  1. task exact match (highest weight)
+  2. journey_stage exact match
+  3. problem_family exact match
+  4. symptom word overlap (weak match)
+  5. tags overlap (weak match)
+  6. environment as rerank signal (very weak)
+
+Optional route hint mode (--use-route-hint):
+  When the intake has a known best_candidate_route_id and the caller
+  explicitly passes --use-route-hint, route id is used as an additional
+  weak rerank signal (weight < problem_family).
+
+Filtering:
+  Results below --min-score (default 20) are dropped.
+  If no candidates remain, output [] with exit code 0.
 
 Usage:
     python3 scripts/retrieve_cases.py --intake /path/to/intake.json --top-k 5
-    python3 scripts/retrieve_cases.py --intake /path/to/intake.json --top-k 3 --cases-dir /path/to/cases
+    python3 scripts/retrieve_cases.py --intake /path/to/intake.json --top-k 3 --use-route-hint
+    python3 scripts/retrieve_cases.py --intake /path/to/intake.json --top-k 3 --min-score 40 --exclude-seeds
 """
 
 import argparse
@@ -33,7 +44,6 @@ CASES_DIR = ROOT / "cases"
 def load_cases(cases_dir: Path, exclude_seeds: bool = False) -> list[dict]:
     """Load all case JSON files from the cases directory."""
     cases = []
-    # Scan top-level and seeds/ subdirectory
     scan_paths = [cases_dir]
     seeds_dir = cases_dir / "seeds"
     if seeds_dir.exists():
@@ -56,7 +66,7 @@ def load_cases(cases_dir: Path, exclude_seeds: bool = False) -> list[dict]:
     return cases
 
 
-def score_case(intake: dict, candidate: dict) -> dict[str, Any]:
+def score_case(intake: dict, candidate: dict, use_route_hint: bool = False) -> dict[str, Any]:
     """Score a candidate case against the intake. Returns score dict."""
     score = 0.0
     matched_on = []
@@ -87,12 +97,13 @@ def score_case(intake: dict, candidate: dict) -> dict[str, Any]:
         score += 20.0
         matched_on.append("problem_family")
 
-    # 4. Route id same-bucket weighting
-    intake_route = intake_inference.get("best_candidate_route_id", "")
-    candidate_route = candidate_inference.get("best_candidate_route_id", "")
-    if intake_route and candidate_route and intake_route == candidate_route:
-        score += 10.0
-        matched_on.append("best_candidate_route_id")
+    # 4. Route hint (optional, only when --use-route-hint is set)
+    if use_route_hint:
+        intake_route = intake_inference.get("best_candidate_route_id", "")
+        candidate_route = candidate_inference.get("best_candidate_route_id", "")
+        if intake_route and candidate_route and intake_route == candidate_route:
+            score += 8.0
+            matched_on.append("best_candidate_route_id")
 
     # 5. Symptom / tags weak match
     intake_symptom = intake_evidence.get("symptom", "").lower()
@@ -100,9 +111,7 @@ def score_case(intake: dict, candidate: dict) -> dict[str, Any]:
     intake_tags = set(t.lower() for t in intake.get("tags", []))
     candidate_tags = set(t.lower() for t in candidate.get("tags", []))
 
-    symptom_overlap = 0.0
     if intake_symptom and candidate_symptom:
-        # Simple word-level overlap
         intake_words = set(intake_symptom.split())
         candidate_words = set(candidate_symptom.split())
         common = intake_words & candidate_words
@@ -111,7 +120,6 @@ def score_case(intake: dict, candidate: dict) -> dict[str, Any]:
             score += symptom_overlap * 5.0
             matched_on.append("symptom")
 
-    tag_overlap = 0.0
     if intake_tags and candidate_tags:
         common_tags = intake_tags & candidate_tags
         if common_tags:
@@ -119,18 +127,16 @@ def score_case(intake: dict, candidate: dict) -> dict[str, Any]:
             score += tag_overlap * 3.0
             matched_on.append("tags")
 
-    # 6. Environment rerank signal
+    # 6. Environment rerank signal (very weak)
     intake_env = intake_evidence.get("environment", {})
     candidate_env = candidate_evidence.get("environment", {})
     env_match_info = {}
     if intake_env and candidate_env:
-        # Platform match
         if intake_env.get("platform") and candidate_env.get("platform"):
             if intake_env["platform"] == candidate_env["platform"]:
                 score += 2.0
                 env_match_info["platform_match"] = True
 
-        # Requires_* signals match
         for key in ["requires_login", "requires_dynamic_render",
                     "requires_local_filesystem", "requires_network",
                     "requires_deterministic_execution"]:
@@ -152,18 +158,22 @@ def score_case(intake: dict, candidate: dict) -> dict[str, Any]:
     }
 
 
-def retrieve(intake: dict, cases: list[dict], top_k: int, exclude_seeds: bool = False) -> list[dict]:
-    """Retrieve top-k candidate cases."""
+def retrieve(intake: dict, cases: list[dict], top_k: int,
+             min_score: float = 20.0, use_route_hint: bool = False) -> list[dict]:
+    """Retrieve top-k candidate cases, filtering by min_score."""
     scored = []
     for candidate in cases:
-        scoring = score_case(intake, candidate)
+        scoring = score_case(intake, candidate, use_route_hint)
         scored.append((scoring, candidate))
 
-    # Sort by score descending
     scored.sort(key=lambda x: x[0]["score"], reverse=True)
 
     results = []
-    for scoring, candidate in scored[:top_k]:
+    for scoring, candidate in scored:
+        if scoring["score"] < min_score:
+            continue
+        if len(results) >= top_k:
+            break
         result = {
             "case_id": candidate.get("id", ""),
             "title": candidate.get("title", ""),
@@ -204,6 +214,14 @@ def main():
         "--exclude-seeds", action="store_true",
         help="Exclude synthetic-seed cases from retrieval"
     )
+    parser.add_argument(
+        "--use-route-hint", action="store_true", default=False,
+        help="Allow best_candidate_route_id from intake as a weak rerank signal"
+    )
+    parser.add_argument(
+        "--min-score", type=float, default=20.0,
+        help="Minimum score threshold for candidates (default: 20)"
+    )
     args = parser.parse_args()
 
     intake_path = Path(args.intake)
@@ -225,12 +243,13 @@ def main():
 
     cases = load_cases(cases_dir, args.exclude_seeds)
     if not cases:
-        print("No cases found in the case library.", file=sys.stderr)
-        sys.exit(1)
+        print("[]")
+        sys.exit(0)
 
-    results = retrieve(intake, cases, args.top_k, args.exclude_seeds)
+    results = retrieve(intake, cases, args.top_k, args.min_score, args.use_route_hint)
 
     print(json.dumps(results, indent=2, ensure_ascii=False))
+    sys.exit(0)
 
 
 if __name__ == "__main__":

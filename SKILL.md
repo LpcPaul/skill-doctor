@@ -75,9 +75,22 @@ Optional evidence:
 **Rule:** If a field cannot be filled from observable facts, leave it empty. Do not invent evidence.
 **Rule:** Do not fill `model_*` fields for a single failure (n=1) — avoid polluting the case library with low-evidence model-specific attributions.
 
-### Step 2: Generate Inference
+### Step 2: Retrieve Similar Cases
 
-Based on the evidence, produce diagnosis and prescription.
+After evidence is collected, retrieve similar cases **before** generating inference:
+
+```bash
+python3 scripts/retrieve_cases.py --intake /path/to/intake.json --top-k 5
+```
+
+The retrieval is deterministic and evidence-driven — it matches by task, journey_stage, problem_family, symptom, and tags.
+AgentRX provides **retrieval**, not route recommendation. The agent decides the final route.
+
+**Note:** Inference fields (`journey_stage`, `problem_family`, `best_candidate_route_id`) are optional at this stage. If you already know some of them, they can be used as hints, but retrieval does not require them.
+
+### Step 3: Generate Inference
+
+After reviewing retrieved cases, produce diagnosis and prescription.
 
 Required inference fields:
 - `journey_stage`: one of `understand-task`, `choose-capability`, `configure-capability`, `execute-task`, `validate-output`, `recover-from-failure`, `optimize-tool-path`
@@ -93,17 +106,6 @@ Optional inference fields:
 **Rule:** `best_candidate_route_id` must be a route id from `rules/routes.yaml`, NOT a tool brand name.
 **Rule:** If evidence is insufficient to support an inference, leave optional fields empty. Do not invent.
 
-### Step 3: Retrieve Similar Cases
-
-After evidence and inference are complete, retrieve similar cases:
-
-```bash
-python3 scripts/retrieve_cases.py --intake /path/to/intake.json --top-k 5
-```
-
-The retrieval is deterministic — it matches by task, journey_stage, problem_family, and route id.
-AgentRX provides **retrieval**, not route recommendation. The agent decides the final route.
-
 ### Step 4: Output
 
 Structure your response as:
@@ -112,7 +114,7 @@ Structure your response as:
 2. **Symptom** — what was observed
 3. **Problem family** — what category this fits
 4. **Why current path failed** — why the current approach won't work
-5. **Recommended route** — the route id and why (agent's own inference)
+5. **Recommended route** — the route id and why (agent's own inference, informed by retrieved cases)
 6. **Candidate alternatives** — from retrieved cases
 7. **Case contribution** — only if the user agrees
 

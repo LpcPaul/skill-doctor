@@ -84,13 +84,31 @@ def _is_seed_file(case_id: str, seeds_dir: Path) -> bool:
     return False
 
 
+def _get_outcome(case: dict) -> str:
+    """Extract outcome with priority: resolutions[-1].outcome > resolution.outcome > 'unknown'."""
+    resolutions = case.get("resolutions", [])
+    if resolutions and isinstance(resolutions, list) and len(resolutions) > 0:
+        last = resolutions[-1]
+        if isinstance(last, dict) and last.get("outcome"):
+            return last["outcome"]
+    resolution = case.get("resolution", {})
+    if isinstance(resolution, dict) and resolution.get("outcome"):
+        return resolution["outcome"]
+    return "unknown"
+
+
 def build_index_entry(case: dict, seeds_dir: Path = None) -> dict:
     """Build a lightweight index entry from a normalized case."""
     if seeds_dir is None:
         seeds_dir = Path()
     evidence = case.get("evidence", {})
     inference = case.get("inference", {})
-    resolution = case.get("resolution", {})
+
+    case_id = case.get("id", "unknown")
+    is_seed = (
+        case.get("source") == "synthetic-seed"
+        or _is_seed_file(case_id, seeds_dir)
+    )
 
     # Build searchable text from key fields
     searchable_parts = [
@@ -116,7 +134,7 @@ def build_index_entry(case: dict, seeds_dir: Path = None) -> dict:
         attempted_path = str(ap)
 
     return {
-        "id": case.get("id", "unknown"),
+        "id": case_id,
         "title": case.get("title", ""),
         "summary": case.get("summary", ""),
         "schema_version": case.get("schema_version", "unknown"),
@@ -129,12 +147,12 @@ def build_index_entry(case: dict, seeds_dir: Path = None) -> dict:
         "why_current_path_failed": inference.get("why_current_path_failed", ""),
         "best_candidate_route_id": inference.get("best_candidate_route_id", ""),
         "confidence": inference.get("confidence", "medium"),
-        "outcome": resolution.get("outcome", "unknown"),
+        "outcome": _get_outcome(case),
         "tags": case.get("tags", []),
         "searchable_text": searchable_text,
         "verified": case.get("verified", False),
         "source": case.get("source", "unknown"),
-        "is_seed": case.get("source") == "synthetic-seed" or _is_seed_file(normalized.get("id", ""), seeds_dir),
+        "is_seed": is_seed,
     }
 
 

@@ -43,14 +43,19 @@ A hook should not try to replace the entire diagnosis layer.
 
 ## Recommended hook outputs
 
-When a hook fires, it should ideally emit structured signals that help populate:
+When a hook fires, it should ideally emit structured signals that help populate the **evidence** section of the intake card:
 
-- `journey_stage`
-- `observed_symptom`
-- `tool_triggered`
-- `tool_type`
-- `constraints`
-- `attempted_actions`
+| Schema path | Hook responsibility |
+|---|---|
+| `evidence.symptom` | Capture the raw deterministic failure fact |
+| `evidence.attempted_path.tool` | Which tool was invoked |
+| `evidence.attempted_path.tool_type` | Tool type (skill, mcp, builtin, etc.) |
+| `evidence.environment` | Platform, requires_* booleans |
+| `evidence.context` | Additional situation context |
+| `evidence.reproduction_steps` | What was already tried |
+| `evidence.failed_step` | Specific step that failed |
+
+**Hooks are responsible for prefilling evidence only.** They do not produce inference. Only when signals are completely deterministic and involve no model judgment may a hook supplement minimal classification hints — but this is the exception, not the rule.
 
 ## Good examples
 

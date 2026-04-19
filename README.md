@@ -115,6 +115,14 @@ git clone https://github.com/LpcPaul/AgentRX.git ~/.codex/skills/agentrx
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How cases enter the system — JSON-only contribution path |
 | [cases/README.md](cases/README.md) | Case library structure and indexing |
 
+## Developer validation
+
+```bash
+pip install -r requirements-dev.txt
+python3 scripts/ci_self_test.py
+python3 scripts/build_index.py
+```
+
 ## License
 
 MIT
